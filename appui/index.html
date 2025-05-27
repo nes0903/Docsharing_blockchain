@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>문서 공유 시스템</title>
+    <!-- Web3.js 라이브러리 로드 - 이더리움 블록체인과 상호작용하기 위함 -->
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <!-- IPFS HTTP 클라이언트 라이브러리 로드 - IPFS 네트워크와 상호작용하기 위함 -->
+    <script src="https://cdn.jsdelivr.net/npm/ipfs-http-client@60.0.1/dist/index.min.js"></script>
+    <style>
+        /* 전체 페이지 스타일링 */
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        /* 문서 아이템 컨테이너 스타일링 */
+        .document-item {
+            display: flex;
+            align-items: flex-start;
+            border: 1px solid #e0e0e0;
+            background: #fff;
+            padding: 16px;
+            margin: 16px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            transition: box-shadow 0.2s, transform 0.2s;
+            flex-wrap: wrap;
+        }
+        /* 문서 아이템 호버 효과 */
+        .document-item:hover {
+            box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+            transform: translateY(-2px) scale(1.01);
+        }
+        /* 문서 아이콘 스타일링 */
+        .doc-icon {
+            width: 48px;
+            height: 48px;
+            margin-right: 18px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            font-size: 32px;
+            position: relative;
+            flex-direction: column;
+        }
+        /* 문서 미리보기 이미지 스타일링 */
+        .doc-preview-img {
+            width: 48px;
+            height: 48px;
+            object-fit: cover;
+            border-radius: 6px;
+            margin-top: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        /* 문서 미리보기 텍스트 스타일링 */
+        .doc-preview-txt {
+            font-size: 0.85em;
+            color: #555;
+            background: #f5f5f5;
+            border-radius: 5px;
+            padding: 4px 7px;
+            margin-top: 6px;
+            max-width: 180px;
+            max-height: 48px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: pre-line;
+            word-break: break-all;
+        }
+        /* 각 파일 타입별 아이콘 색상 설정 */
+        .doc-pdf { background: #ffeaea; color: #e74c3c; }
+        .doc-docx { background: #eaf1ff; color: #2962ff; }
+        .doc-ppt { background: #fff3e0; color: #ff9800; }
+        .doc-xls { background: #eaffea; color: #43a047; }
+        .doc-txt { background: #f4f4f4; color: #616161; }
+        .doc-etc { background: #ececec; color: #888; }
+        .doc-odt { background: #e0f7fa; color: #00bcd4; }
+        .doc-zip { background: #fbe9e7; color: #d84315; }
+        .doc-img { background: #fffde7; color: #fbc02d; }
+        /* 문서 액션 버튼 컨테이너 스타일링 */
+        .doc-actions {
+            margin-top: 12px;
+            margin-left: 0;
+            display: flex;
+            flex-direction: row;
+            gap: 8px;
+            min-width: 0;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        /* 문서 제목 스타일링 */
+        .doc-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        /* 문서 메타 정보 스타일링 */
+        .doc-meta {
+            font-size: 0.95em;
+            color: #888;
+            margin-bottom: 6px;
+            word-break: break-all;
+        }
+        /* 버튼 기본 스타일링 */
+        button {
+            padding: 6px 12px;
+            margin: 2px 0;
+            border: none;
+            border-radius: 5px;
+            background: #e3f2fd;
+            color: #1976d2;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+            box-shadow: 0 1px 2px rgba(25, 118, 210, 0.04);
+        }
+        /* 버튼 호버 효과 */
+        button:hover {
+            background: #bbdefb;
+            color: #0d47a1;
+        }
+        /* 관리자 섹션 스타일링 */
+        .admin-section {
+            background-color: #f0f0f0;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        /* 파일 입력 필드 숨김 */
+        #fileInput {
+            display: none;
+        }
+        /* 파일 업로드 영역 스타일링 */
+        .file-upload {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            text-align: center;
+            cursor: pointer;
+        }
+        /* 파일 업로드 영역 호버 효과 */
+        .file-upload:hover {
+            background-color: #f0f0f0;
+        }
+        /* 모달 배경 스타일링 */
+        .modal-bg {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        /* 모달 박스 스타일링 */
+        .modal-box {
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+            padding: 24px 20px 18px 20px;
+            min-width: 280px;
+            max-width: 90vw;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        /* 모달 라벨 스타일링 */
+        .modal-box label {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        /* 모달 입력 필드 스타일링 */
+        .modal-box input {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-bottom: 14px;
+        }
+        /* 모달 버튼 컨테이너 스타일링 */
+        .modal-box .modal-btns {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        /* 태그 입력 관련 스타일 */
+        .tag-input-container {
+            margin: 10px 0;
+        }
+        
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 5px;
+        }
+        
+        .tag {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 8px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .tag button {
+            background: none;
+            border: none;
+            color: #1976d2;
+            padding: 0;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        .document-options {
+            display: flex;
+            gap: 15px;
+            margin: 10px 0;
+            align-items: center;
+        }
+        
+        .document-options label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        /* 팀 관리 관련 스타일 */
+        .team-list {
+            margin-top: 20px;
+        }
+        
+        .team-item {
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        
+        .team-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .team-name {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .team-members {
+            margin-top: 10px;
+        }
+        
+        .team-member {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .team-member:last-child {
+            border-bottom: none;
+        }
+        
+        .team-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>문서 공유 시스템</h1>
+    
+    <!-- 문서 등록 섹션 -->
+    <div class="admin-section">
+        <h2>문서 등록</h2>
+        <div class="file-upload" onclick="document.getElementById('fileInput').click()">
+            파일을 선택하려면 클릭하세요
+        </div>
+        <input type="file" id="fileInput" onchange="handleFileSelect(event)">
+        <div id="fileInfo"></div>
+        <input type="text" id="docTitle" placeholder="문서 제목">
+        <div class="tag-input-container">
+            <input type="text" id="tagInput" placeholder="태그 입력 후 엔터">
+            <div id="tagList" class="tag-list"></div>
+        </div>
+        <div class="document-options">
+            <label>
+                <input type="checkbox" id="isPrivate"> 비공개 문서
+            </label>
+            <label>
+                <input type="checkbox" id="isEncrypted"> 문서 암호화
+            </label>
+            <input type="password" id="encryptionKey" placeholder="암호화 키" style="display: none;">
+        </div>
+        <button onclick="createDocument()">문서 등록</button>
+    </div>
+
+    <!-- 문서 검색 및 필터링 섹션 -->
+    <div class="admin-section">
+        <h2>문서 검색 및 필터링</h2>
+        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+            <select id="filterType" onchange="searchAndFilterDocuments()">
+                <option value="all">전체 문서</option>
+                <option value="public">공개 문서</option>
+                <option value="private">비공개 문서</option>
+                <option value="my">내 문서</option>
+            </select>
+            <select id="sortType" onchange="searchAndFilterDocuments()">
+                <option value="newest">최신순</option>
+                <option value="oldest">오래된순</option>
+                <option value="title">제목순</option>
+            </select>
+            <input type="text" id="searchInput" placeholder="검색어를 입력하세요" onkeyup="searchAndFilterDocuments()" style="width: 200px; margin-left: 10px;">
+        </div>
+        <div id="searchResults"></div>
+    </div>
+
+    <!-- 문서 목록 표시 영역 -->
+    <div id="documentsList"></div>
+
+    <!-- 팀 관리 섹션 -->
+    <div class="admin-section">
+        <h2>팀 관리</h2>
+        <div class="team-actions">
+            <input type="text" id="teamName" placeholder="팀 이름">
+            <button onclick="createTeam()">팀 생성</button>
+        </div>
+        <div id="teamList" class="team-list"></div>
+    </div>
+
+    <script>
+        // Web3와 컨트랙트 인스턴스 변수 선언
+        let web3;
+        let contract;
+        let currentAccount;
+        // 스마트 컨트랙트 주소
+        const contractAddress = '0x3E0d13aD68ea3C164C019E32B6F4310705Ef8fdB';
+        // 스마트 컨트랙트 ABI 정의
+        const contractABI = [
+            {
+                "inputs": [],
+                "stateMutability": "nonpayable",
+                "type": "constructor"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": false,
+                        "internalType": "uint256",
+                        "name": "docId",
+                        "type": "uint256"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "address",
+                        "name": "user",
+                        "type": "address"
+                    }
+                ],
+                "name": "AccessGranted",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": false,
+                        "internalType": "uint256",
+                        "name": "docId",
+                        "type": "uint256"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "address",
+                        "name": "user",
+                        "type": "address"
+                    }
+                ],
+                "name": "AccessRevoked",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": false,
+                        "internalType": "uint256",
+                        "name": "docId",
+                        "type": "uint256"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "string",
+                        "name": "title",
+                        "type": "string"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "address",
+                        "name": "owner",
+                        "type": "address"
+                    }
+                ],
+                "name": "DocumentCreated",
+                "type": "event"
+            },
+            {
+                "inputs": [],
+                "name": "admin",
+                "outputs": [
+                    {
+                        "internalType": "address",
+                        "name": "",
+                        "type": "address"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "string",
+                        "name": "_title",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "_documentHash",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "_isPrivate",
+                        "type": "bool"
+                    }
+                ],
+                "name": "createDocument",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_docId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "deleteDocument",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "documentCount",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "documents",
+                "outputs": [
+                    {
+                        "internalType": "string",
+                        "name": "title",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "documentHash",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "owner",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "isPrivate",
+                        "type": "bool"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_docId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "getAccessList",
+                "outputs": [
+                    {
+                        "internalType": "address[]",
+                        "name": "",
+                        "type": "address[]"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_docId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "getDocument",
+                "outputs": [
+                    {
+                        "internalType": "string",
+                        "name": "title",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "documentHash",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "owner",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "isPrivate",
+                        "type": "bool"
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "hasAccess",
+                        "type": "bool"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_docId",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "_user",
+                        "type": "address"
+                    }
+                ],
+                "name": "grantAccess",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_docId",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "_user",
+                        "type": "address"
+                    }
+                ],
+                "name": "revokeAccess",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_docId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "revokeAllAccess",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_docId",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "_newTitle",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "_isPrivate",
+                        "type": "bool"
+                    }
+                ],
+                "name": "updateDocument",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_docId",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "_newOwner",
+                        "type": "address"
+                    }
+                ],
+                "name": "transferOwnership",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
+
+        // IPFS 클라이언트 초기화
+        const ipfs = window.IpfsHttpClient.create({
+            host: '127.0.0.1',
+            port: 5001,
+            protocol: 'http'
+        });
+
+        // 선택된 파일 정보 저장 변수
+        let selectedFile = null;
+        let selectedFileHash = null;
+
+        // 파일 선택 처리 함수
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            selectedFile = file;
+            const fileInfo = document.getElementById('fileInfo');
+            fileInfo.innerHTML = `선택된 파일: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+
+            try {
+                // 파일을 FormData로 변환하여 IPFS에 업로드
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('http://localhost:8000/ipfs/add', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                selectedFileHash = result.Hash;
+                fileInfo.innerHTML += `<br>IPFS 해시: ${selectedFileHash}`;
+            } catch (error) {
+                console.error('IPFS 업로드 실패:', error);
+                fileInfo.innerHTML += '<br>IPFS 업로드 실패';
+            }
+        }
+
+        // 초기화 함수 - Web3 연결 및 계정 설정
+        async function init() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    // MetaMask 연결 요청
+                    const accounts = await window.ethereum.request({ 
+                        method: 'eth_requestAccounts' 
+                    });
+                    
+                    // Web3 인스턴스 생성
+                    web3 = new Web3(window.ethereum);
+                    currentAccount = accounts[0];
+                    
+                    // 컨트랙트 인스턴스 생성
+                    contract = new web3.eth.Contract(contractABI, contractAddress);
+                    
+                    // 네트워크 ID 확인
+                    const networkId = await web3.eth.net.getId();
+                    console.log('Connected to network:', networkId);
+                    
+                    // 문서 목록 로드
+                    await loadDocuments();
+                    await loadTeams();
+                    
+                    // 계정 변경 이벤트 리스너
+                    window.ethereum.on('accountsChanged', function (accounts) {
+                        currentAccount = accounts[0];
+                        loadDocuments();
+                        loadTeams();
+                    });
+                    
+                    // 네트워크 변경 이벤트 리스너
+                    window.ethereum.on('chainChanged', function (chainId) {
+                        window.location.reload();
+                    });
+
+                    // 연결 해제 이벤트 리스너 (close 대신 disconnect 사용)
+                    window.ethereum.on('disconnect', function () {
+                        console.log('MetaMask disconnected');
+                        window.location.reload();
+                    });
+                    
+                } catch (error) {
+                    console.error('초기화 실패:', error);
+                    alert('MetaMask 연결에 실패했습니다. MetaMask가 설치되어 있고 올바른 네트워크에 연결되어 있는지 확인해주세요.');
+                }
+            } else {
+                alert('MetaMask를 설치해주세요! https://metamask.io/');
+            }
+        }
+
+        // 문서 검색 및 필터링 함수
+        async function searchAndFilterDocuments() {
+            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            const filterType = document.getElementById('filterType').value;
+            const sortType = document.getElementById('sortType').value;
+            const searchResults = document.getElementById('searchResults');
+            searchResults.innerHTML = '';
+            
+            try {
+                const accounts = await web3.eth.getAccounts();
+                currentAccount = accounts[0];
+                const docCount = await contract.methods.documentCount().call();
+                let filteredDocs = [];
+                
+                for (let i = 0; i < docCount; i++) {
+                    const result = await contract.methods.getDocument(i).call();
+                    
+                    if (result.title) {
+                        const doc = {
+                            id: i,
+                            title: result.title,
+                            documentHash: result.documentHash,
+                            owner: result.owner,
+                            isPrivate: result.isPrivate,
+                            hasAccess: result.hasAccess,
+                            tags: result.tags || [],
+                            viewCount: result.viewCount || 0,
+                            downloadCount: result.downloadCount || 0,
+                            isEncrypted: result.isEncrypted || false
+                        };
+                        
+                        // 검색어 필터링 (제목 + 태그)
+                        const searchText = doc.title.toLowerCase() + ' ' + doc.tags.join(' ').toLowerCase();
+                        if (searchText.includes(searchInput)) {
+                            switch (filterType) {
+                                case 'public':
+                                    if (!doc.isPrivate) filteredDocs.push(doc);
+                                    break;
+                                case 'private':
+                                    if (doc.isPrivate) filteredDocs.push(doc);
+                                    break;
+                                case 'my':
+                                    if (doc.owner.toLowerCase() === currentAccount.toLowerCase()) filteredDocs.push(doc);
+                                    break;
+                                default:
+                                    filteredDocs.push(doc);
+                            }
+                        }
+                    }
+                }
+                
+                // 정렬 처리
+                filteredDocs.sort((a, b) => {
+                    switch (sortType) {
+                        case 'newest':
+                            return b.id - a.id;
+                        case 'oldest':
+                            return a.id - b.id;
+                        case 'title':
+                            return a.title.localeCompare(b.title);
+                        case 'views':
+                            return b.viewCount - a.viewCount;
+                        case 'downloads':
+                            return b.downloadCount - a.downloadCount;
+                        default:
+                            return 0;
+                    }
+                });
+                
+                // 필터링된 문서 표시
+                filteredDocs.forEach(doc => {
+                    const docDiv = document.createElement('div');
+                    docDiv.className = 'document-item';
+
+                    // 파일 확장자 추출
+                    let ext = '';
+                    if (doc.title && doc.title.includes('.')) {
+                        ext = doc.title.split('.').pop().toLowerCase();
+                    }
+                    let iconClass = 'doc-etc';
+                    let iconSVG = '';
+                    if (ext === 'pdf') {
+                        iconClass = 'doc-pdf';
+                        iconSVG = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="none"/><path d="M6 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.828a2 2 0 0 0-.586-1.414l-3.828-3.828A2 2 0 0 0 15.172 4H6z" fill="#e74c3c"/><text x="7" y="19" font-size="8" fill="#fff" font-family="Arial" font-weight="bold">PDF</text></svg>`;
+                    } else if (ext === 'doc' || ext === 'docx') {
+                        iconClass = 'doc-docx';
+                        iconSVG = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="none"/><path d="M6 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.828a2 2 0 0 0-.586-1.414l-3.828-3.828A2 2 0 0 0 15.172 4H6z" fill="#2962ff"/><text x="7" y="19" font-size="8" fill="#fff" font-family="Arial" font-weight="bold">DOC</text></svg>`;
+                    } else if (ext === 'ppt' || ext === 'pptx') {
+                        iconClass = 'doc-ppt';
+                        iconSVG = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="none"/><path d="M6 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.828a2 2 0 0 0-.586-1.414l-3.828-3.828A2 2 0 0 0 15.172 4H6z" fill="#ff9800"/><text x="7" y="19" font-size="8" fill="#fff" font-family="Arial" font-weight="bold">PPT</text></svg>`;
+                    } else if (ext === 'xls' || ext === 'xlsx') {
+                        iconClass = 'doc-xls';
+                        iconSVG = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="none"/><path d="M6 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.828a2 2 0 0 0-.586-1.414l-3.828-3.828A2 2 0 0 0 15.172 4H6z" fill="#43a047"/><text x="7" y="19" font-size="8" fill="#fff" font-family="Arial" font-weight="bold">XLS</text></svg>`;
+                    } else if (ext === 'txt') {
+                        iconClass = 'doc-txt';
+                        iconSVG = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="none"/><path d="M6 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.828a2 2 0 0 0-.586-1.414l-3.828-3.828A2 2 0 0 0 15.172 4H6z" fill="#616161"/><text x="7" y="19" font-size="8" fill="#fff" font-family="Arial" font-weight="bold">TXT</text></svg>`;
+                    } else if (ext === 'odt') {
+                        iconClass = 'doc-odt';
+                        iconSVG = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="none"/><path d="M6 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.828a2 2 0 0 0-.586-1.414l-3.828-3.828A2 2 0 0 0 15.172 4H6z" fill="#00bcd4"/><text x="7" y="19" font-size="8" fill="#fff" font-family="Arial" font-weight="bold">ODT</text></svg>`;
+                    } else if (["zip", "rar", "7z"].includes(ext)) {
+                        iconClass = 'doc-zip';
+                        iconSVG = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="none"/><path d="M6 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.828a2 2 0 0 0-.586-1.414l-3.828-3.828A2 2 0 0 0 15.172 4H6z" fill="#d84315"/><text x="7" y="19" font-size="8" fill="#fff" font-family="Arial" font-weight="bold">ZIP</text></svg>`;
+                    } else if (["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"].includes(ext)) {
+                        iconClass = 'doc-img';
+                        iconSVG = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="none"/><circle cx="12" cy="12" r="8" fill="#fbc02d"/><text x="8" y="19" font-size="8" fill="#fff" font-family="Arial" font-weight="bold">IMG</text></svg>`;
+                    } else {
+                        iconClass = 'doc-etc';
+                        iconSVG = `<svg width=\"32\" height=\"32\" viewBox=\"0 0 24 24\" fill=\"none\"><rect width=\"24\" height=\"24\" rx=\"6\" fill=\"#888\"/><text x=\"7\" y=\"19\" font-size=\"8\" fill=\"#fff\" font-family=\"Arial\" font-weight=\"bold\">ETC</text></svg>`;
+                    }
+
+                    // 미리보기 영역 준비
+                    let previewHTML = '';
+                    if (["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"].includes(ext)) {
+                        previewHTML = `<img class='doc-preview-img' src='http://localhost:8000/ipfs/cat/${doc.documentHash}' alt='미리보기'>`;
+                    } else if (ext === 'txt') {
+                        previewHTML = `<div class='doc-preview-txt' id='preview-txt-${doc.id}'>불러오는 중...</div>`;
+                    } else if (ext === 'pdf') {
+                        previewHTML = `<button style='margin-top:6px;' onclick="window.open('http://localhost:8000/ipfs/cat/${doc.documentHash}', '_blank')">PDF 미리보기</button>`;
+                    }
+
+                    // 태그 표시
+                    const tagsHTML = doc.tags.map(tag => 
+                        `<span class="tag">${tag}</span>`
+                    ).join('');
+
+                    // 통계 정보
+                    const statsHTML = `
+                        <div class="doc-stats">
+                            <span title="조회수"><i class="fas fa-eye"></i> ${doc.viewCount}</span>
+                            <span title="다운로드 수"><i class="fas fa-download"></i> ${doc.downloadCount}</span>
+                        </div>
+                    `;
+
+                    // 공유 링크 생성 버튼
+                    const shareButton = doc.owner === currentAccount ? 
+                        `<button onclick="createShareLink(${doc.id})">공유 링크 생성</button>` : '';
+
+                    // 암호화 상태 표시
+                    const encryptionStatus = doc.isEncrypted ? 
+                        '<span class="encryption-badge"><i class="fas fa-lock"></i> 암호화됨</span>' : '';
+
+                    docDiv.innerHTML = `
+                        <div class="doc-icon ${iconClass}">${iconSVG}${previewHTML}</div>
+                        <div style="flex:1; min-width:0; display: flex; flex-direction: column; justify-content: center;">
+                            <div class="doc-title">
+                                ${doc.title}
+                                ${encryptionStatus}
+                            </div>
+                            <div class="doc-meta">IPFS 해시: ${doc.documentHash}</div>
+                            <div class="doc-meta">소유자: ${doc.owner}</div>
+                            <div class="doc-meta">상태: ${doc.isPrivate ? '비공개' : '공개'} / 접근 권한: ${doc.hasAccess ? '있음' : '없음'}</div>
+                            <div class="doc-tags">${tagsHTML}</div>
+                            ${statsHTML}
+                            <div class="doc-actions">
+                                ${doc.hasAccess ? `<button onclick="viewDocument(${doc.id})">보기</button>` : ''}
+                                ${doc.hasAccess ? `<button onclick="downloadDocument('${doc.documentHash}', '${doc.title}')">다운로드</button>` : ''}
+                                ${doc.owner === currentAccount ? `
+                                    <button onclick="updateDocument(${doc.id})">수정</button>
+                                    <button onclick="deleteDocument(${doc.id})">삭제</button>
+                                    <button onclick="transferOwnership(${doc.id})">소유권 이전</button>
+                                    <button onclick="showAccessList(${doc.id})">접근 권한 목록</button>
+                                    <button onclick="revokeAllAccess(${doc.id})">모든 접근 권한 해제</button>
+                                    <button onclick="openGrantAccessModal(${doc.id})">접근 권한 부여</button>
+                                    ${shareButton}
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                    // 텍스트 파일 미리보기 비동기 로딩
+                    if (ext === 'txt') {
+                        fetch(`http://localhost:8000/ipfs/cat/${doc.documentHash}`)
+                            .then(res => res.text())
+                            .then(text => {
+                                document.getElementById(`preview-txt-${doc.id}`).innerText = text.slice(0, 120) + (text.length > 120 ? '...' : '');
+                            })
+                            .catch(() => {
+                                document.getElementById(`preview-txt-${doc.id}`).innerText = '미리보기 불가';
+                            });
+                    }
+                    searchResults.appendChild(docDiv);
+                });
+            } catch (error) {
+                console.error('문서 검색 및 필터링 실패:', error);
+            }
+        }
+
+        // 태그 관련 변수
+        let documentTags = [];
+
+        // 태그 입력 처리
+        document.getElementById('tagInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const tag = this.value.trim();
+                if (tag && !documentTags.includes(tag)) {
+                    documentTags.push(tag);
+                    updateTagList();
+                }
+                this.value = '';
+            }
+        });
+
+        // 태그 목록 업데이트
+        function updateTagList() {
+            const tagList = document.getElementById('tagList');
+            tagList.innerHTML = documentTags.map(tag => `
+                <span class="tag">
+                    ${tag}
+                    <button onclick="removeTag('${tag}')">&times;</button>
+                </span>
+            `).join('');
+        }
+
+        // 태그 제거
+        function removeTag(tag) {
+            documentTags = documentTags.filter(t => t !== tag);
+            updateTagList();
+        }
+
+        // 암호화 체크박스 이벤트
+        document.getElementById('isEncrypted').addEventListener('change', function() {
+            const encryptionKeyInput = document.getElementById('encryptionKey');
+            encryptionKeyInput.style.display = this.checked ? 'block' : 'none';
+        });
+
+        // 문서 생성 함수
+        async function createDocument() {
+            if (!selectedFileHash) {
+                alert('파일을 선택하고 IPFS에 업로드해주세요!');
+                return;
+            }
+
+            const title = document.getElementById('docTitle').value;
+            if (!title) {
+                alert('문서 제목을 입력해주세요!');
+                return;
+            }
+
+            const isPrivate = document.getElementById('isPrivate').checked;
+            
+            try {
+                const accounts = await web3.eth.getAccounts();
+                
+                // 가스 추정
+                const gasEstimate = await contract.methods.createDocument(
+                    title, 
+                    selectedFileHash, 
+                    isPrivate
+                ).estimateGas({ from: accounts[0] });
+
+                // 트랜잭션 전송
+                await contract.methods.createDocument(
+                    title, 
+                    selectedFileHash, 
+                    isPrivate
+                ).send({ 
+                    from: accounts[0],
+                    gas: Math.floor(gasEstimate * 1.2) // 가스 한도 20% 증가
+                });
+                
+                // 입력 필드 초기화
+                document.getElementById('docTitle').value = '';
+                document.getElementById('isPrivate').checked = false;
+                document.getElementById('fileInput').value = '';
+                document.getElementById('fileInfo').innerHTML = '';
+                selectedFile = null;
+                selectedFileHash = null;
+                
+                // 문서 목록 새로고침
+                await searchAndFilterDocuments();
+                
+                alert('문서가 성공적으로 등록되었습니다!');
+            } catch (error) {
+                console.error('문서 등록 실패:', error);
+                if (error.code === -32603) {
+                    alert('가스 부족 또는 네트워크 오류가 발생했습니다. MetaMask에서 가스 한도를 확인해주세요.');
+                } else {
+                    alert('문서 등록에 실패했습니다. 다시 시도해주세요.');
+                }
+            }
+        }
+
+        // 접근 권한 부여 함수
+        async function grantAccess(docId, userAddress) {
+            try {
+                const accounts = await web3.eth.getAccounts();
+                await contract.methods.grantAccess(docId, userAddress).send({ from: accounts[0] });
+                loadDocuments();
+            } catch (error) {
+                console.error('접근 권한 부여 실패:', error);
+            }
+        }
+
+        // 문서 다운로드 함수
+        async function downloadDocument(ipfsHash, fileName) {
+            try {
+                // IPFS에서 파일 다운로드
+                const response = await fetch(`http://localhost:8000/ipfs/cat/${ipfsHash}`);
+                if (!response.ok) throw new Error('파일 다운로드 실패');
+                
+                // 파일 데이터를 Blob으로 변환
+                const blob = await response.blob();
+                
+                // 다운로드 링크 생성 및 클릭
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                
+                // 정리
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (error) {
+                console.error('다운로드 실패:', error);
+                alert('파일 다운로드에 실패했습니다.');
+            }
+        }
+
+        // 문서 삭제 함수
+        async function deleteDocument(docId) {
+            if (!confirm('정말로 이 문서를 삭제하시겠습니까?')) return;
+            
+            try {
+                const accounts = await web3.eth.getAccounts();
+                await contract.methods.deleteDocument(docId).send({ from: accounts[0] });
+                
+                // 문서 목록 새로고침
+                await loadDocuments();
+                
+                // 필터링 초기화
+                document.getElementById('filterType').value = 'all';
+                document.getElementById('sortType').value = 'newest';
+                searchAndFilterDocuments();
+            } catch (error) {
+                console.error('문서 삭제 실패:', error);
+                alert('문서 삭제에 실패했습니다.');
+            }
+        }
+
+        // 문서 수정 함수
+        async function updateDocument(docId) {
+            const newTitle = prompt('새로운 문서 제목을 입력하세요:');
+            if (!newTitle) return;
+            
+            const isPrivate = confirm('비공개 문서로 설정하시겠습니까?');
+            
+            try {
+                const accounts = await web3.eth.getAccounts();
+                await contract.methods.updateDocument(docId, newTitle, isPrivate).send({ from: accounts[0] });
+                loadDocuments();
+            } catch (error) {
+                console.error('문서 수정 실패:', error);
+                alert('문서 수정에 실패했습니다.');
+            }
+        }
+
+        // 소유권 이전 함수
+        async function transferOwnership(docId) {
+            const newOwner = prompt('새로운 소유자의 주소를 입력하세요:');
+            if (!newOwner) return;
+            
+            try {
+                const accounts = await web3.eth.getAccounts();
+                await contract.methods.transferOwnership(docId, newOwner).send({ from: accounts[0] });
+                loadDocuments();
+            } catch (error) {
+                console.error('소유권 이전 실패:', error);
+                alert('소유권 이전에 실패했습니다.');
+            }
+        }
+
+        // 모든 접근 권한 해제 함수
+        async function revokeAllAccess(docId) {
+            if (!confirm('모든 접근 권한을 해제하시겠습니까?')) return;
+            
+            try {
+                const accounts = await web3.eth.getAccounts();
+                await contract.methods.revokeAllAccess(docId).send({ from: accounts[0] });
+                loadDocuments();
+            } catch (error) {
+                console.error('접근 권한 해제 실패:', error);
+                alert('접근 권한 해제에 실패했습니다.');
+            }
+        }
+
+        // 접근 권한 목록 조회 함수
+        async function showAccessList(docId) {
+            try {
+                const accounts = await web3.eth.getAccounts();
+                const accessList = await contract.methods.getAccessList(docId).call();
+                
+                let message = '접근 권한 목록:\n\n';
+                accessList.forEach((address, index) => {
+                    message += `${index + 1}. ${address}\n`;
+                });
+                
+                alert(message);
+            } catch (error) {
+                console.error('접근 권한 목록 조회 실패:', error);
+                alert('접근 권한 목록 조회에 실패했습니다.');
+            }
+        }
+
+        // 전체 문서 목록 저장 변수
+        let allDocuments = [];
+
+        // 문서 목록 로드 함수
+        async function loadDocuments() {
+            const documentsList = document.getElementById('documentsList');
+            documentsList.innerHTML = '';
+            allDocuments = [];
+            
+            try {
+                const accounts = await web3.eth.getAccounts();
+                currentAccount = accounts[0];
+                const docCount = await contract.methods.documentCount().call();
+                
+                // 모든 문서 정보 가져오기
+                for (let i = 0; i < docCount; i++) {
+                    const result = await contract.methods.getDocument(i).call();
+                    
+                    if (result.title) {
+                        allDocuments.push({
+                            id: i,
+                            title: result.title,
+                            documentHash: result.documentHash,
+                            owner: result.owner,
+                            isPrivate: result.isPrivate,
+                            hasAccess: result.hasAccess
+                        });
+                    }
+                }
+                
+                searchAndFilterDocuments();
+            } catch (error) {
+                console.error('문서 목록 로드 실패:', error);
+            }
+        }
+
+        // 접근 권한 부여 모달 표시 함수
+        function openGrantAccessModal(docId) {
+            // 이미 모달이 있으면 제거
+            const oldModal = document.getElementById('grantAccessModal');
+            if (oldModal) oldModal.remove();
+
+            // 모달 배경 생성
+            const modalBg = document.createElement('div');
+            modalBg.className = 'modal-bg';
+            modalBg.id = 'grantAccessModal';
+
+            // 모달 내용 생성
+            const modalBox = document.createElement('div');
+            modalBox.className = 'modal-box';
+            modalBox.innerHTML = `
+                <label>접근 권한을 부여할 사용자 주소</label>
+                <input type="text" id="grantUserAddress" placeholder="0x...">
+                <div class="modal-btns">
+                    <button id="grantBtn">부여</button>
+                    <button id="closeBtn">취소</button>
+                </div>
+            `;
+            modalBg.appendChild(modalBox);
+            document.body.appendChild(modalBg);
+
+            // 모달 이벤트 핸들러 설정
+            document.getElementById('grantUserAddress').focus();
+            document.getElementById('closeBtn').onclick = () => modalBg.remove();
+            document.getElementById('grantBtn').onclick = async () => {
+                const userAddress = document.getElementById('grantUserAddress').value.trim();
+                if (!userAddress) {
+                    alert('사용자 주소를 입력하세요!');
+                    return;
+                }
+                await grantAccess(docId, userAddress);
+                modalBg.remove();
+            };
+        }
+
+        // 문서 조회 함수
+        async function viewDocument(docId) {
+            try {
+                const accounts = await web3.eth.getAccounts();
+                const doc = await contract.methods.getDocument(docId).call();
+                await contract.methods.viewDocument(docId).send({ from: accounts[0] });
+                
+                // 문서 미리보기 표시
+                showDocumentPreview(docId, doc.documentHash, doc.title, doc.isEncrypted);
+                
+                // 문서 목록 새로고침
+                await searchAndFilterDocuments();
+            } catch (error) {
+                console.error('문서 조회 실패:', error);
+            }
+        }
+
+        // 공유 링크 생성 함수
+        async function createShareLink(docId) {
+            const expiryTime = prompt('링크 만료 시간(초)을 입력하세요:', '86400'); // 기본값 24시간
+            if (!expiryTime) return;
+            
+            const isPasswordProtected = confirm('비밀번호로 보호하시겠습니까?');
+            let passwordHash = '';
+            if (isPasswordProtected) {
+                const password = prompt('비밀번호를 입력하세요:');
+                if (!password) return;
+                passwordHash = await web3.utils.sha3(password);
+            }
+            
+            const maxUses = prompt('최대 사용 횟수를 입력하세요:', '0'); // 0은 무제한
+            if (maxUses === null) return;
+            
+            try {
+                const accounts = await web3.eth.getAccounts();
+                const linkId = await contract.methods.createShareLink(
+                    docId,
+                    parseInt(expiryTime),
+                    isPasswordProtected,
+                    passwordHash,
+                    parseInt(maxUses)
+                ).send({ from: accounts[0] });
+                
+                const shareUrl = `${window.location.origin}${window.location.pathname}?link=${linkId}`;
+                alert(`공유 링크가 생성되었습니다:\n${shareUrl}`);
+            } catch (error) {
+                console.error('공유 링크 생성 실패:', error);
+                alert('공유 링크 생성에 실패했습니다.');
+            }
+        }
+
+        // 팀 목록 로드 함수
+        async function loadTeams() {
+            try {
+                const accounts = await web3.eth.getAccounts();
+                const teamList = document.getElementById('teamList');
+                teamList.innerHTML = '';
+                
+                // 팀 목록을 가져오는 대신 현재는 빈 목록 표시
+                teamList.innerHTML = '<p>팀 기능은 현재 개발 중입니다.</p>';
+            } catch (error) {
+                console.error('팀 목록 로드 실패:', error);
+            }
+        }
+
+        // 팀 생성 함수
+        async function createTeam() {
+            const teamName = document.getElementById('teamName').value.trim();
+            if (!teamName) {
+                alert('팀 이름을 입력하세요!');
+                return;
+            }
+            
+            try {
+                const accounts = await web3.eth.getAccounts();
+                await contract.methods.createTeam(teamName).send({ from: accounts[0] });
+                document.getElementById('teamName').value = '';
+                await loadTeams();
+            } catch (error) {
+                console.error('팀 생성 실패:', error);
+                alert('팀 생성에 실패했습니다.');
+            }
+        }
+
+        // 문서 미리보기 모달 표시 함수
+        function showDocumentPreview(docId, docHash, docTitle, isEncrypted) {
+            // 이미 모달이 있으면 제거
+            const oldModal = document.getElementById('previewModal');
+            if (oldModal) oldModal.remove();
+
+            // 모달 배경 생성
+            const modalBg = document.createElement('div');
+            modalBg.className = 'modal-bg';
+            modalBg.id = 'previewModal';
+
+            // 모달 내용 생성
+            const modalBox = document.createElement('div');
+            modalBox.className = 'modal-box preview-modal';
+            
+            // 파일 확장자 추출
+            let ext = '';
+            if (docTitle && docTitle.includes('.')) {
+                ext = docTitle.split('.').pop().toLowerCase();
+            }
+            
+            let previewContent = '';
+            if (isEncrypted) {
+                previewContent = `
+                    <div class="encrypted-preview">
+                        <i class="fas fa-lock"></i>
+                        <p>이 문서는 암호화되어 있습니다.</p>
+                        <input type="password" id="decryptKey" placeholder="암호화 키를 입력하세요">
+                        <button onclick="decryptAndPreview('${docHash}', '${docTitle}')">복호화</button>
+                    </div>
+                `;
+            } else if (["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"].includes(ext)) {
+                previewContent = `<img src="http://localhost:8000/ipfs/cat/${docHash}" alt="미리보기">`;
+            } else if (ext === 'pdf') {
+                previewContent = `<iframe src="http://localhost:8000/ipfs/cat/${docHash}" width="100%" height="500px"></iframe>`;
+            } else if (ext === 'txt') {
+                previewContent = `<div id="textPreview" class="text-preview">불러오는 중...</div>`;
+            } else {
+                previewContent = `
+                    <div class="no-preview">
+                        <i class="fas fa-file"></i>
+                        <p>이 파일 형식은 미리보기를 지원하지 않습니다.</p>
+                        <button onclick="downloadDocument('${docHash}', '${docTitle}')">다운로드</button>
+                    </div>
+                `;
+            }
+
+            modalBox.innerHTML = `
+                <div class="preview-header">
+                    <h3>${docTitle}</h3>
+                    <button onclick="this.closest('.modal-bg').remove()">&times;</button>
+                </div>
+                <div class="preview-content">
+                    ${previewContent}
+                </div>
+            `;
+            
+            modalBg.appendChild(modalBox);
+            document.body.appendChild(modalBg);
+
+            // 텍스트 파일 미리보기 로드
+            if (ext === 'txt') {
+                fetch(`http://localhost:8000/ipfs/cat/${docHash}`)
+                    .then(res => res.text())
+                    .then(text => {
+                        document.getElementById('textPreview').innerText = text;
+                    })
+                    .catch(() => {
+                        document.getElementById('textPreview').innerText = '미리보기를 불러올 수 없습니다.';
+                    });
+            }
+        }
+
+        // 문서 복호화 및 미리보기 함수
+        async function decryptAndPreview(docHash, docTitle) {
+            const key = document.getElementById('decryptKey').value;
+            if (!key) {
+                alert('암호화 키를 입력하세요!');
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:8000/ipfs/cat/${docHash}`);
+                const encryptedData = await response.arrayBuffer();
+                
+                // 여기에 실제 복호화 로직 구현
+                // 예시로는 단순히 Base64 디코딩만 수행
+                const decryptedData = atob(new TextDecoder().decode(encryptedData));
+                
+                // 복호화된 데이터 표시
+                const previewContent = document.querySelector('.preview-content');
+                previewContent.innerHTML = `
+                    <div class="decrypted-preview">
+                        <pre>${decryptedData}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('복호화 실패:', error);
+                alert('복호화에 실패했습니다.');
+            }
+        }
+
+        // 스타일 추가
+        const newStyles = `
+            .doc-stats {
+                display: flex;
+                gap: 15px;
+                margin: 5px 0;
+                color: #666;
+                font-size: 0.9em;
+            }
+            
+            .doc-stats span {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+            
+            .encryption-badge {
+                background: #e8f5e9;
+                color: #2e7d32;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 0.8em;
+                margin-left: 8px;
+            }
+            
+            .doc-tags {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px;
+                margin: 5px 0;
+            }
+        `;
+
+        // 스타일 태그 추가
+        const styleTag = document.createElement('style');
+        styleTag.textContent = newStyles;
+        document.head.appendChild(styleTag);
+
+        // Font Awesome 추가
+        const fontAwesome = document.createElement('link');
+        fontAwesome.rel = 'stylesheet';
+        fontAwesome.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css';
+        document.head.appendChild(fontAwesome);
+
+        // 스타일 추가
+        const previewStyles = `
+            .preview-modal {
+                width: 80vw;
+                max-width: 1200px;
+                height: 80vh;
+                max-height: 800px;
+            }
+            
+            .preview-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 15px;
+            }
+            
+            .preview-header h3 {
+                margin: 0;
+            }
+            
+            .preview-content {
+                height: calc(100% - 50px);
+                overflow: auto;
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 15px;
+            }
+            
+            .preview-content img {
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+            }
+            
+            .text-preview {
+                white-space: pre-wrap;
+                font-family: monospace;
+                background: #fff;
+                padding: 15px;
+                border-radius: 4px;
+                border: 1px solid #e0e0e0;
+            }
+            
+            .encrypted-preview {
+                text-align: center;
+                padding: 40px;
+            }
+            
+            .encrypted-preview i {
+                font-size: 48px;
+                color: #666;
+                margin-bottom: 20px;
+            }
+            
+            .no-preview {
+                text-align: center;
+                padding: 40px;
+            }
+            
+            .no-preview i {
+                font-size: 48px;
+                color: #666;
+                margin-bottom: 20px;
+            }
+            
+            .decrypted-preview {
+                background: #fff;
+                padding: 15px;
+                border-radius: 4px;
+                border: 1px solid #e0e0e0;
+            }
+            
+            .decrypted-preview pre {
+                margin: 0;
+                white-space: pre-wrap;
+                word-break: break-all;
+            }
+        `;
+
+        // 스타일 태그 추가
+        const previewStyleTag = document.createElement('style');
+        previewStyleTag.textContent = previewStyles;
+        document.head.appendChild(previewStyleTag);
+
+        // 페이지 로드 시 초기화
+        window.onload = init;
+    </script>
+</body>
+</html> 
