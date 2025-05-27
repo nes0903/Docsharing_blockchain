@@ -1,5 +1,3 @@
-# Docsharing_blockchain
-Documents sharing system based on ETH process
 Decentralized Document Sharing dApp (IPFS + Ethereum 기반 문서 공유 시스템)
 
 ◆ 프로젝트 개요
